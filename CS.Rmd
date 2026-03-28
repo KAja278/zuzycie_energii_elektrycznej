@@ -1,0 +1,135 @@
+---
+title: "CS-household"
+author: "Kaja Szewczyk"
+date: "2025-11-27"
+output: html_document
+---
+
+#Potrzebne biblioteki 
+```{r}
+library(dplyr)
+library(ggplot2)
+library(MLmetrics)
+library(randomForest)
+library(rpart)
+library(MASS)
+library(rpart.plot)
+library(corrplot)
+```
+#Załadowane dane
+```{r}
+df<-read.table("D:/Users/kajas/Desktop/wizualizacja danych/household_power/household_power_consumption.txt", 
+               sep=";", header=TRUE)
+```
+#Typ danych
+```{r}
+str(df)
+```
+#Pierwsze parę wierszy ramki danych
+```{r}
+head(df)
+```
+#Opis danych
+##Dane zawierają miary konsumpcji prądu elektrycznego na przestrzeni 4 lat, z krokiem próbkowania równym minutę. (grudzień 2006 - listopad 2010)
+##global_active_power*1000/60 - sub_metering1-sub_metering2-sub_metering3
+##ok 1,25% wierszy zawiera braki danych 
+##Zmienne:
+###-data w formacie dd/mm/yyyy
+###-czas w formacie hh:mm:ss
+###-global_active_power w kilowatach
+###-global_reactive_power w kilowatach
+###-voltage w woltach
+###-global_intensity w amperach
+###-sub_metering1 w wato-godzinach energii aktywnej (kuchnia- zmywarka, piekarnik, mikrofalówka)
+###-sub_metering2 w wato-godzinach energii aktywnej (pralnia- pralka, suszarka, zamrażarka i światło)
+###-sub_metering3 w wato-godzinach energii aktywnej (piec elektryczny, klimatyzacja)
+
+
+#Zamiana chr na numeric
+```{r}
+
+df$Global_active_power<-as.numeric(df$Global_active_power)
+df$Global_reactive_power<-as.numeric(df$Global_reactive_power)
+df$Voltage<-as.numeric(df$Voltage)
+df$Global_intensity<-as.numeric(df$Global_intensity)
+df$Sub_metering_1<-as.numeric(df$Sub_metering_1)
+df$Sub_metering_2<-as.numeric(df$Sub_metering_2)
+
+```
+#praktycznie wszystkie cechy mają typ chr, należy więc zamienić to na numeric
+#w danych nie występują bezpośrednio NA, tylko mamy do czynienia z brakami w postaci "?"
+#po zastosowaniu as.numeric stringi które nie zawierają liczb zamienią się w NA
+
+#rozdzielenie daty i godizny 
+```{r}
+
+df$Datetime <- as.POSIXct(paste(df$Date, df$Time), format="%d/%m/%Y %H:%M:%S")
+
+df$year <- as.numeric(format(df$Datetime, "%Y"))
+df$month <- as.numeric(format(df$Datetime, "%m"))
+df$day<-as.numeric(format(df$Datetime,"%d"))
+df$hour<-as.numeric(format(df$Datetime, "%H"))
+df$minute<-as.numeric(format(df$Datetime, "%M"))
+
+head(df)
+
+
+```
+
+```{r}
+#wykresy obrazowujace zmiane
+#jesli wezmiemy pod uwage wszystkie 4 lata to nic nie widac 
+#wykresy dla 1 i 2 lutego 
+okr_czas<-subset(df, Date=="1/2/2007" | Date =="2/2/2007")
+par(mfrow=c(2,2))
+plot(okr_czas$Datetime,okr_czas$Global_active_power,type="l")
+plot(okr_czas$Datetime,okr_czas$Global_reactive_power,type="l")
+plot(okr_czas$Datetime,okr_czas$Voltage,type="l")
+plot(okr_czas$Datetime,okr_czas$Global_intensity,type="l")
+
+```
+```{r}
+#wykresy dla 1 lutego 2007, godziny: 0-23
+wykres_dzien <- subset(df, Date == "1/2/2007" & hour >= 0 & hour <= 23)
+par(mfrow=c(2,2))
+plot(wykres_dzien$Datetime,wykres_dzien$Global_active_power,type="l")
+plot(wykres_dzien$Datetime,wykres_dzien$Global_reactive_power,type="l")
+plot(wykres_dzien$Datetime,wykres_dzien$Voltage,type="l")
+plot(wykres_dzien$Datetime,wykres_dzien$Global_intensity,type="l")
+
+```
+
+```{r}
+daily_energy<- df%>%
+  mutate(Date=as.Date(Datetime))%>%
+  group_by(Date)%>%
+  summarise(Daily_Consumption_kWh= sum(Global_active_power, na.rm=TRUE))
+ggplot(daily_energy, aes(x=Date,y=Daily_Consumption_kWh))+
+  geom_line(color="red")+
+  labs(title="Daily Energy Consumption", 
+       x="Date", y="Energy Consumption (kWh)")+
+  theme_minimal()
+
+```
+
+```{r}
+
+#kuchnia- zmywarka, piekarnik, mikrofalówka
+plot(wykres_dzien$Datetime,wykres_dzien$Sub_metering_1, type="l",col="grey")
+# pralka, zamrażarka, światło 
+points(wykres_dzien$Datetime,wykres_dzien$Sub_metering_2,type="l",col="blue")
+#klima, piec grzewczy
+points(wykres_dzien$Datetime,wykres_dzien$Sub_metering_3,type="l",col="red")
+
+
+```
+```{r}
+#set.seed(123)
+#df <- df[sample(nrow(df), nrow(df)/2),]
+set.seed(123)
+test <- df[(nrow(df)-3):nrow(df), ]
+train <- df[1:(nrow(df)-4), ]
+#do zbioru testowego wybrane zostały 4 ostatnie obserwacje z uwagi na to ze jest to szereg czasowy
+
+
+```
