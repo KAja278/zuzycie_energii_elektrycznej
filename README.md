@@ -1,4 +1,4 @@
-# Energy Consumption Analysis
+# Case Study: zużycie energii elektrycznej
 
 Projekt analizy zużycia energii elektrycznej w gospodarstwie domowym oraz budowy modeli predykcyjnych na podstawie danych czasowych.
 
